@@ -21,17 +21,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
     private final Map<String, CommandNode<S>> children = new LinkedHashMap<>();
-    private final Map<String, LiteralCommandNode<S>> literals = new LinkedHashMap<>();
-    private final Map<String, ArgumentCommandNode<S, ?>> arguments = new LinkedHashMap<>();
     private final Predicate<S> requirement;
     private final CommandNode<S> redirect;
     private final RedirectModifier<S> modifier;
     private final boolean forks;
     private Command<S> command;
+    private boolean hasLiteral;
 
     protected CommandNode(final Command<S> command, final Predicate<S> requirement, final CommandNode<S> redirect, final RedirectModifier<S> modifier, final boolean forks) {
         this.command = command;
@@ -82,9 +82,7 @@ public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
         } else {
             children.put(node.getName(), node);
             if (node instanceof LiteralCommandNode) {
-                literals.put(node.getName(), (LiteralCommandNode<S>) node);
-            } else if (node instanceof ArgumentCommandNode) {
-                arguments.put(node.getName(), (ArgumentCommandNode<S, ?>) node);
+                this.hasLiteral = true;
             }
         }
     }
@@ -150,22 +148,46 @@ public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
 
     protected abstract String getSortedKey();
 
-    public Collection<? extends CommandNode<S>> getRelevantNodes(final StringReader input) {
-        if (literals.size() > 0) {
+    public RelevantNodeContext<S> getRelevantNodes(final StringReader input) {
+        if (this.hasLiteral) {
             final int cursor = input.getCursor();
             while (input.canRead() && input.peek() != ' ') {
                 input.skip();
             }
             final String text = input.getString().substring(cursor, input.getCursor());
             input.setCursor(cursor);
-            final LiteralCommandNode<S> literal = literals.get(text);
-            if (literal != null) {
-                return Collections.singleton(literal);
+            final CommandNode<S> node = children.get(text);
+            if (node instanceof LiteralCommandNode) {
+                return new RelevantNodeContext<>(Collections.singleton(node), (obj) -> true); // Singleton collection
             } else {
-                return arguments.values();
+                return RelevantNodeContext.ofChildren(this);
             }
         } else {
-            return arguments.values();
+            return RelevantNodeContext.ofChildren(this);
+        }
+    }
+
+    public static class RelevantNodeContext<T> {
+
+        private final Iterable<CommandNode<T>> iterable;
+        private final Function<CommandNode<T>, Boolean> function;
+
+        static <T> RelevantNodeContext<T> ofChildren(CommandNode<T> node) {
+            return new RelevantNodeContext<>(node.children.values(), (obj) -> obj instanceof ArgumentCommandNode);
+        }
+
+        RelevantNodeContext(Iterable<CommandNode<T>> iterable, Function<CommandNode<T>, Boolean> function) {
+            this.iterable = iterable;
+            this.function = function;
+        }
+
+        // Is not promised to be relevant, must check with isRelevant
+        public Iterable<CommandNode<T>> nodes() {
+            return this.iterable;
+        }
+
+        public boolean isRelevant(CommandNode<T> node) {
+            return this.function.apply(node);
         }
     }
 

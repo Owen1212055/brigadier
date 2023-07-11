@@ -14,12 +14,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -148,7 +143,7 @@ public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
 
     protected abstract String getSortedKey();
 
-    public RelevantNodeContext<S> getRelevantNodes(final StringReader input) {
+    public Iterable<CommandNode<S>> getRelevantNodes(final StringReader input) {
         if (this.hasLiteral) {
             final int cursor = input.getCursor();
             while (input.canRead() && input.peek() != ' ') {
@@ -158,36 +153,12 @@ public abstract class CommandNode<S> implements Comparable<CommandNode<S>> {
             input.setCursor(cursor);
             final CommandNode<S> node = children.get(text);
             if (node instanceof LiteralCommandNode) {
-                return new RelevantNodeContext<>(Collections.singleton(node), (obj) -> true); // Singleton collection
+                return this.children.values();
             } else {
-                return RelevantNodeContext.ofChildren(this);
+                return ConditionalIterator.of(this.children.values().iterator(), (obj) -> obj instanceof ArgumentCommandNode);
             }
         } else {
-            return RelevantNodeContext.ofChildren(this);
-        }
-    }
-
-    public static class RelevantNodeContext<T> {
-
-        private final Iterable<CommandNode<T>> iterable;
-        private final Function<CommandNode<T>, Boolean> function;
-
-        static <T> RelevantNodeContext<T> ofChildren(CommandNode<T> node) {
-            return new RelevantNodeContext<>(node.children.values(), (obj) -> obj instanceof ArgumentCommandNode);
-        }
-
-        RelevantNodeContext(Iterable<CommandNode<T>> iterable, Function<CommandNode<T>, Boolean> function) {
-            this.iterable = iterable;
-            this.function = function;
-        }
-
-        // Is not promised to be relevant, must check with isRelevant
-        public Iterable<CommandNode<T>> nodes() {
-            return this.iterable;
-        }
-
-        public boolean isRelevant(CommandNode<T> node) {
-            return this.function.apply(node);
+            return ConditionalIterator.of(this.children.values().iterator(), (obj) -> obj instanceof ArgumentCommandNode);
         }
     }
 

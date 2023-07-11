@@ -355,9 +355,8 @@ public class CommandDispatcher<S> {
         List<ParseResults<S>> potentials = null;
         final int cursor = originalReader.getCursor();
 
-        final CommandNode.RelevantNodeContext<S> nodeContext = node.getRelevantNodes(originalReader);
-        for (final CommandNode<S> child : nodeContext.nodes()) {
-            if (!nodeContext.isRelevant(child) || !child.canUse(source)) {
+        for (final CommandNode<S> child : node.getRelevantNodes(originalReader)) {
+            if (!child.canUse(source)) {
                 continue;
             }
             final CommandContextBuilder<S> context = contextSoFar.copy();
